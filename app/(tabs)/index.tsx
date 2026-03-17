@@ -26,7 +26,10 @@ async function registerForPushNotifications(userId: string) {
   }
   if (finalStatus !== 'granted') return;
   try {
-    const token = (await Notifications.getExpoPushTokenAsync()).data;
+    const token = (await Notifications.getExpoPushTokenAsync({
+      projectId: '7827a860-d655-4389-ba9e-b91d3ed9ca09'
+    })).data;
+    console.log('Push token:', token);
     if (token) {
       await supabase.from('users').update({ push_token: token }).eq('id', userId);
     }

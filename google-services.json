@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "46834636847",
+    "project_id": "clubly-7b5ca",
+    "storage_bucket": "clubly-7b5ca.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:46834636847:android:2baaa4f66f7ea89f39ceda",
+        "android_client_info": {
+          "package_name": "com.akashj.clubly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDnXTW8y2FjAC5HDVKwtl5jaRK0EuJbuOE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
