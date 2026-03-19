@@ -17,24 +17,35 @@ Notifications.setNotificationHandler({
 });
 
 async function registerForPushNotifications(userId: string) {
-  if (!Device.isDevice) return;
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-  if (finalStatus !== 'granted') return;
   try {
-    const token = (await Notifications.getExpoPushTokenAsync({
-      projectId: '7827a860-d655-4389-ba9e-b91d3ed9ca09'
-    })).data;
-    console.log('Push token:', token);
-    if (token) {
-      await supabase.from('users').update({ push_token: token }).eq('id', userId);
+    if (!Device.isDevice) { console.log('Not a device, skipping push'); return; }
+    
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    console.log('Current permission status:', existingStatus);
+    
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+      console.log('New permission status:', finalStatus);
     }
-  } catch (e) {
-    console.log('Push token error:', e);
+    
+    if (finalStatus !== 'granted') { console.log('Permission denied'); return; }
+    
+    console.log('Getting push token...');
+    const tokenData = await Notifications.getExpoPushTokenAsync({
+      projectId: '7827a860-d655-4389-ba9e-b91d3ed9ca09'
+    });
+    const token = tokenData.data;
+    console.log('Push token obtained:', token);
+    
+    if (token) {
+      const { error } = await supabase.from('users').update({ push_token: token }).eq('id', userId);
+      if (error) console.log('DB update error:', error.message);
+      else console.log('Push token saved successfully!');
+    }
+  } catch (e: any) {
+    console.log('Push token error:', e?.message || e);
   }
 }
 
