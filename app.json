@@ -14,7 +14,7 @@
     "android": {
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.akashj.clubly",
-      "googleServicesFile": "./google-services.json",
+     
       "adaptiveIcon": {
         "backgroundColor": "#0a0118",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -30,7 +30,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      
       [
         "expo-splash-screen",
         {
