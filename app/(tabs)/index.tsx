@@ -2,51 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, StatusBar, ScrollView, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Dimensions, FlatList, Alert,
+  Platform, ActivityIndicator, Dimensions, FlatList, Alert, RefreshControl,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-device';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
 
 async function registerForPushNotifications(userId: string) {
-  try {
-    if (!Device.isDevice) { console.log('Not a device, skipping push'); return; }
-    
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    console.log('Current permission status:', existingStatus);
-    
-    let finalStatus = existingStatus;
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-      console.log('New permission status:', finalStatus);
-    }
-    
-    if (finalStatus !== 'granted') { console.log('Permission denied'); return; }
-    
-    console.log('Getting push token...');
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: '7827a860-d655-4389-ba9e-b91d3ed9ca09'
-    });
-    const token = tokenData.data;
-    console.log('Push token obtained:', token);
-    
-    if (token) {
-      const { error } = await supabase.from('users').update({ push_token: token }).eq('id', userId);
-      if (error) console.log('DB update error:', error.message);
-      else console.log('Push token saved successfully!');
-    }
-  } catch (e: any) {
-    console.log('Push token error:', e?.message || e);
-  }
+  // Push notifications handled via APK build
 }
 
 async function sendPushNotification(userId: string, title: string, body: string) {
@@ -215,10 +176,14 @@ function LoginScreen({ onLogin, onGoSignup, onAdminLogin, onForgotPassword }: {
     if (err) { setLoading(false); setError(err.message); return; }
     const { data: userData } = await supabase.from('users').select('role, profile_completed, club_id').eq('id', data.user.id).single();
     setLoading(false);
-    // Register for push notifications
     registerForPushNotifications(data.user.id);
     const isAdmin = userData?.role === 'admin';
     const isClubHead = userData?.role === 'club_head';
+    if (isAdmin) {
+      setError('Please use the Admin Login button below to access the admin panel.');
+      await supabase.auth.signOut();
+      return;
+    }
     onLogin(isAdmin, userData?.profile_completed === true, isClubHead);
   };
 
@@ -414,6 +379,8 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   const [eventTitle, setEventTitle] = useState(''), [eventDesc, setEventDesc] = useState('');
   const [eventDate, setEventDate] = useState(''), [eventVenue, setEventVenue] = useState(''), [eventClubId, setEventClubId] = useState('');
   const [loading, setLoading] = useState(false), [fetching, setFetching] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [eventRegistrants, setEventRegistrants] = useState<any[]>([]);
   const [selectedClub, setSelectedClub] = useState<any>(null);
   const [clubMembers, setClubMembers] = useState<any[]>([]);
   const [selectedMember, setSelectedMember] = useState<any>(null);
@@ -441,6 +408,15 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      supabase.from('event_registrations')
+        .select('*, users(name, email, department, year, roll_number)')
+        .eq('event_id', selectedEvent.id)
+        .then(({ data }) => setEventRegistrants(data || []));
+    }
+  }, [selectedEvent]);
 
   const fetchMembers = async (clubId: string) => {
     const { data } = await supabase
@@ -522,6 +498,36 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   const handleLogout = async () => { await supabase.auth.signOut(); onLogout(); };
 
+  // Show event registrants
+  if (selectedEvent) {
+    return (
+      <SafeAreaView style={auth.safe}>
+        <ScrollView contentContainerStyle={auth.scroll}>
+          <TouchableOpacity onPress={() => { setSelectedEvent(null); setEventRegistrants([]); }} style={auth.backBtn}>
+            <Text style={auth.backText}>← Back</Text>
+          </TouchableOpacity>
+          <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+            <Text style={{ color: TEXT, fontSize: 22, fontWeight: '900' }}>{selectedEvent.title}</Text>
+            <Text style={{ color: MUTED, fontSize: 13, marginTop: 4 }}>{selectedEvent.date?.split('T')[0]} • {selectedEvent.venue}</Text>
+          </View>
+          <View style={auth.card}>
+            <Text style={auth.cardTitle}>Registrations ({eventRegistrants.length})</Text>
+            {eventRegistrants.length === 0
+              ? <Text style={{ color: MUTED, fontSize: 14, textAlign: 'center', paddingVertical: 20 }}>No registrations yet</Text>
+              : eventRegistrants.map((r: any, i: number) => (
+                <View key={r.id} style={{ paddingVertical: 12, borderBottomWidth: i < eventRegistrants.length - 1 ? 1 : 0, borderBottomColor: BORDER }}>
+                  <Text style={{ color: TEXT, fontSize: 14, fontWeight: '700' }}>{r.users?.name || 'Unknown'}</Text>
+                  <Text style={{ color: MUTED, fontSize: 12, marginTop: 2 }}>{r.users?.email} • {r.users?.department}</Text>
+                  <Text style={{ color: MUTED, fontSize: 11, marginTop: 2 }}>{r.users?.roll_number} • {r.users?.year}</Text>
+                </View>
+              ))
+            }
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (selectedMember) {
     const u = selectedMember.users;
     return (
@@ -594,7 +600,11 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
 
   return (
     <SafeAreaView style={adm.safe}>
-      <ScrollView style={adm.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={adm.scroll} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={fetching} onRefresh={fetchData} tintColor={PURPLE} colors={[PURPLE]} />}
+      >
         <View style={adm.header}>
           <View><Text style={adm.title}>Admin Panel</Text><Text style={adm.subtitle}>Manage Clubly</Text></View>
           <TouchableOpacity style={adm.logoutBtn} onPress={handleLogout}><Text style={adm.logoutText}>Logout</Text></TouchableOpacity>
@@ -770,14 +780,14 @@ function AdminDashboard({ onLogout }: { onLogout: () => void }) {
           {events.length === 0
             ? <View style={adm.empty}><Text style={adm.emptyText}>No events yet. Create one above.</Text></View>
             : events.map(e => (
-              <View key={e.id} style={adm.card}>
+              <TouchableOpacity key={e.id} style={adm.card} onPress={() => setSelectedEvent(e)}>
                 <View style={{ flex: 1 }}>
                   <Text style={adm.cardTitle}>{e.title}</Text>
                   <Text style={adm.cardSub}>{e.clubs?.name} • {e.date?.split('T')[0]}</Text>
                   <Text style={adm.cardSub}>Venue: {e.venue}</Text>
-                  <Text style={adm.cardSub}>Registrations: {e.registration_count || 0}</Text>
+                  <Text style={[adm.cardSub, { color: ACCENT, marginTop: 4 }]}>Tap to view registrations</Text>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))
           }
         </>}
@@ -1036,7 +1046,11 @@ function ClubHeadDashboard({ onLogout }: { onLogout: () => void }) {
 
   return (
     <SafeAreaView style={adm.safe}>
-      <ScrollView style={adm.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={adm.scroll} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => {}} tintColor={PURPLE} colors={[PURPLE]} />}
+      >
         <View style={adm.header}>
           <View>
             <Text style={[adm.title, { color: '#c084fc' }]}>Club Head</Text>
@@ -1403,6 +1417,7 @@ function DashboardScreen({ onLogout }: { onLogout: () => void }) {
   const [applyError, setApplyError] = useState('');
   const [applySuccess, setApplySuccess] = useState(false);
   const [clubAnnouncements, setClubAnnouncements] = useState<any[]>([]);
+  const [myApplications, setMyApplications] = useState<string[]>([]);
   const [userName, setUserName] = useState('');
   const [joinedCount, setJoinedCount] = useState(0);
   const [reqName, setReqName] = useState(''), [reqDesc, setReqDesc] = useState(''), [reqCat, setReqCat] = useState('');
@@ -1411,28 +1426,39 @@ function DashboardScreen({ onLogout }: { onLogout: () => void }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [registeredEvents, setRegisteredEvents] = useState<string[]>([]);
   const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadData = async () => {
     supabase.from('clubs').select('*').then(({ data }) => setClubs(data || []));
     supabase.from('events').select('*, clubs(name)').order('date', { ascending: true }).then(({ data }) => setEvents(data || []));
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setCurrentUserId(user.id);
-        supabase.from('users').select('name').eq('id', user.id).single().then(({ data }) => setUserName(data?.name || ''));
-        supabase.from('club_members').select('id, club_id, clubs(*)').eq('user_id', user.id).then(({ data }) => {
-          setJoinedCount(data?.length || 0);
-          setJoinedClubIds((data || []).map((m: any) => m.club_id));
-          setJoinedClubs((data || []).map((m: any) => m.clubs).filter(Boolean));
-        });
-        supabase.from('notifications').select('id').eq('user_id', user.id).eq('is_read', false).then(({ data }) => {
-          setUnreadCount(data?.length || 0);
-        });
-        supabase.from('event_registrations').select('event_id').eq('user_id', user.id).then(({ data }) => {
-          setRegisteredEvents((data || []).map((r: any) => r.event_id));
-        });
-      }
-    });
-  }, []);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      setCurrentUserId(user.id);
+      supabase.from('users').select('name').eq('id', user.id).single().then(({ data }) => setUserName(data?.name || ''));
+      supabase.from('club_members').select('id, club_id, clubs(*)').eq('user_id', user.id).then(({ data }) => {
+        setJoinedCount(data?.length || 0);
+        setJoinedClubIds((data || []).map((m: any) => m.club_id));
+        setJoinedClubs((data || []).map((m: any) => m.clubs).filter(Boolean));
+      });
+      supabase.from('notifications').select('id').eq('user_id', user.id).eq('is_read', false).then(({ data }) => {
+        setUnreadCount(data?.length || 0);
+      });
+      supabase.from('event_registrations').select('event_id').eq('user_id', user.id).then(({ data }) => {
+        setRegisteredEvents((data || []).map((r: any) => r.event_id));
+      });
+      supabase.from('applications').select('club_id').eq('user_id', user.id).then(({ data }) => {
+        setMyApplications((data || []).map((a: any) => a.club_id));
+      });
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   const registerEvent = async (eventId: string, eventTitle: string) => {
     Alert.alert(
@@ -1639,8 +1665,16 @@ function DashboardScreen({ onLogout }: { onLogout: () => void }) {
               </View>
             ))}
           </>}
-          {applySuccess
-            ? <View style={clu.successBox}><Text style={clu.successText}> Application sent! Wait for approval.</Text></View>
+          {myApplications.includes(selectedClub.id)
+            ? <View style={{ backgroundColor: '#1e1b4b', borderRadius: 12, padding: 16, marginTop: 16, borderWidth: 1, borderColor: '#312e81' }}>
+                <Text style={{ color: '#a5b4fc', fontSize: 14, textAlign: 'center', fontWeight: '600' }}>Application Pending — Awaiting admin approval</Text>
+              </View>
+            : joinedClubIds.includes(selectedClub.id)
+            ? <View style={{ backgroundColor: '#052e16', borderRadius: 12, padding: 16, marginTop: 16, borderWidth: 1, borderColor: '#166534' }}>
+                <Text style={{ color: '#86efac', fontSize: 14, textAlign: 'center', fontWeight: '600' }}>You are already a member of this club</Text>
+              </View>
+            : applySuccess
+            ? <View style={clu.successBox}><Text style={clu.successText}>Application sent! Wait for approval.</Text></View>
             : <>
               <Text style={auth.label}>Why do you want to join?</Text>
               <TextInput style={[auth.input, { height: 80, textAlignVertical: 'top' }]} placeholder="Tell the club why you'd be a great member..." placeholderTextColor="#555" value={applyMessage} onChangeText={setApplyMessage} multiline />
@@ -1657,7 +1691,11 @@ function DashboardScreen({ onLogout }: { onLogout: () => void }) {
 
   return (
     <SafeAreaView style={dash.safe}>
-      <ScrollView style={dash.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={dash.scroll} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PURPLE} colors={[PURPLE]} />}
+      >
         <View style={dash.header}>
           <View>
             <Text style={dash.greeting}>Hello,</Text>
