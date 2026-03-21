@@ -1461,6 +1461,14 @@ function DashboardScreen({ onLogout }: { onLogout: () => void }) {
     setRefreshing(false);
   };
 
+  // Auto refresh every time screen comes into focus
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (!refreshing) loadData();
+    }, 30000); // refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => { loadData(); }, []);
 
   const registerEvent = async (eventId: string, eventTitle: string) => {
