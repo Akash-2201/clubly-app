@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   SafeAreaView, StatusBar, ScrollView, KeyboardAvoidingView,
-  Platform, ActivityIndicator, Dimensions, FlatList, Alert, RefreshControl, Image,
+  Platform, ActivityIndicator, Dimensions, FlatList, Alert, RefreshControl,
 } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
@@ -61,10 +61,7 @@ function SplashScreen({ onNext }: { onNext: () => void }) {
       </View>
       <View style={splash.bottom}>
         <TouchableOpacity style={splash.btn} onPress={onNext}><Text style={splash.btnText}>Get Started →</Text></TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 }}>
-          <Image source={require('../../assets/images/college-logo.png')} style={{ width: 28, height: 28, borderRadius: 4 }} resizeMode="contain" />
-          <Text style={splash.college}>Sapthagiri NPS University</Text>
-        </View>
+        <Text style={splash.college}>Sapthagiri NPS University</Text>
       </View>
     </View>
   );
@@ -198,10 +195,7 @@ function LoginScreen({ onLogin, onGoSignup, onAdminLogin, onForgotPassword }: {
             <View style={auth.logoSmall}><Text style={auth.logoIcon}>✦</Text></View>
             <Text style={auth.brand}>Clubly</Text>
             <Text style={auth.tagline}>Welcome back!</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <Image source={require('../../assets/images/college-logo.png')} style={{ width: 20, height: 20, borderRadius: 3 }} resizeMode="contain" />
-              <Text style={{ color: MUTED, fontSize: 12 }}>Sapthagiri NPS University</Text>
-            </View>
+
           </View>
           <View style={auth.card}>
             <Text style={auth.cardTitle}>Sign In</Text>
@@ -819,6 +813,8 @@ function ProfileScreen({ onBack, onLogout }: { onBack: () => void; onLogout: () 
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    setEditing(false);
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
