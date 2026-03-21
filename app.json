@@ -14,9 +14,8 @@
     "android": {
       "softwareKeyboardLayoutMode": "pan",
       "package": "com.akashj.clubly",
-     
       "adaptiveIcon": {
-        "backgroundColor": "#0a0118",
+        "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -30,7 +29,6 @@
     },
     "plugins": [
       "expo-router",
-      
       [
         "expo-splash-screen",
         {
