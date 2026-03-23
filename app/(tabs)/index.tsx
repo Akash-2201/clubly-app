@@ -230,8 +230,25 @@ function SignupScreen({ onBack, onDone }: { onBack: () => void; onDone: () => vo
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (!/^[0-9]{2}[A-Z]+[0-9]{3}$/.test(rollNo)) { setError('Invalid roll number. Format: 24SUUBEDAS013'); return; }
     setLoading(true); setError('');
-    const { error: signUpErr } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name, roll_number: rollNo } } });
+    const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name, roll_number: rollNo } } });
     if (signUpErr) { setLoading(false); setError(signUpErr.message); return; }
+    
+    // Manually insert user record in case trigger fails
+    if (signUpData.user) {
+      // Wait for auth to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const { error: insertErr } = await supabase.from('users').upsert({
+        id: signUpData.user.id,
+        email,
+        name,
+        role: 'student',
+        profile_completed: false,
+      }, { onConflict: 'id' });
+      if (insertErr) console.log('User insert error:', insertErr.message);
+      else console.log('User inserted successfully!');
+      if (insertErr) { setLoading(false); setError('Signup failed: ' + insertErr.message); return; }
+    }
+    
     setLoading(false); onDone();
   };
 
@@ -278,7 +295,15 @@ function ProfileSetupScreen({ onDone }: { onDone: () => void }) {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       const { error: updateErr } = await supabase.from('users').update({ bio, phone, year, department, profile_completed: true }).eq('id', user.id);
-      if (updateErr) { setLoading(false); setError(updateErr.message); return; }
+      if (updateErr) {
+        setLoading(false);
+        if (updateErr.message.includes('users_phone_unique')) {
+          setError('This phone number is already used by another student');
+        } else {
+          setError(updateErr.message);
+        }
+        return;
+      }
     }
     setLoading(false); onDone();
   };
@@ -836,7 +861,16 @@ function ProfileScreen({ onBack, onLogout }: { onBack: () => void; onLogout: () 
     setSaving(true); setError('');
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      await supabase.from('users').update({ bio, phone, year, department }).eq('id', user.id);
+      const { error: updateErr } = await supabase.from('users').update({ bio, phone, year, department }).eq('id', user.id);
+      if (updateErr) {
+        setSaving(false);
+        if (updateErr.message.includes('users_phone_unique')) {
+          setError('This phone number is already registered by another student');
+        } else {
+          setError(updateErr.message);
+        }
+        return;
+      }
       setUserData((prev: any) => ({ ...prev, bio, phone, year, department }));
     }
     setSaving(false);
